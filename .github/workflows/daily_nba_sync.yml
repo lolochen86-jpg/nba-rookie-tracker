@@ -1,0 +1,54 @@
+name: Daily NBA Rookie Data Sync & GitHub Pages Deploy
+
+on:
+  schedule:
+    # 每日台灣時間 20:00 (UTC 12:00) 自動抓取當日 NBA 賽後最新數據
+    - cron: '0 12 * * *'
+  workflow_dispatch: # 支援在 GitHub Actions 介面手動一鍵觸發更新
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  sync-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Fetch Latest NBA Rookie Stats & Compute Composite Score
+        run: |
+          python backend/fetch_nba_data.py
+
+      - name: Commit Updated JSON Snapshot & HTML Timestamp
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add data/rookies_latest.json index.html
+          git diff --staged --quiet || git commit -m "chore(data): 每日自動同步 NBA 新秀戰績與成績綜合評分"
+          git push
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
