@@ -28,7 +28,7 @@ def request(kind):
 def aggregate(games):
     if not games:return None
     n=len(games);s={'GP':n,'W':sum(g.get('WL')=='W' for g in games)};s['L']=n-s['W']
-    for k in ['MIN']+COUNT_KEYS:s[k]=sum(float(g.get(k) or 0) for g in games)/n
+    for k in ['MIN']+COUNT_KEYS:s[k]=sum(float(g[k]) for g in games)/n if all(g.get(k) is not None for g in games) else None
     for made,attempt,key in [('FGM','FGA','FG_PCT'),('FG3M','FG3A','FG3_PCT'),('FTM','FTA','FT_PCT')]:s[key]=s[made]/s[attempt] if s[attempt] else None
     s['TS_PCT']=s['PTS']/(2*(s['FGA']+.44*s['FTA'])) if s['FGA']+.44*s['FTA'] else None
     s['EFG_PCT']=(s['FGM']+.5*s['FG3M'])/s['FGA'] if s['FGA'] else None
