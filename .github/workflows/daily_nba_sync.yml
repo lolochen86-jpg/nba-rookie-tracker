@@ -35,18 +35,14 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      - name: Fetch Latest NBA Rookie Stats & Compute Composite Score
-        run: |
-          python backend/fetch_nba_data.py
-
-      - name: Fetch Detailed Player Profiles
-        run: python backend/fetch_player_profiles.py
+      - name: Update verified player data from ESPN
+        run: python backend/fetch_espn.py
 
       - name: Commit Updated JSON Snapshot & HTML Timestamp
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add data/rookies_latest.json data/player_profiles.json index.html
+          git add data/rookies_latest.json data/player_profiles.json data/espn_games_cache.json index.html
           git diff --staged --quiet || git commit -m "chore(data): 每日自動同步 NBA 新秀戰績與成績綜合評分"
           git push
 
