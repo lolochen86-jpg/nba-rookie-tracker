@@ -2,8 +2,8 @@ name: Daily NBA Rookie Data Sync & GitHub Pages Deploy
 
 on:
   schedule:
-    # 每日台灣時間 20:00 (UTC 12:00) 自動抓取當日 NBA 賽後最新數據
-    - cron: '0 12 * * *'
+    # 每日台灣時間 14:00 (UTC 06:00) 自動抓取當日 NBA 賽後最新數據
+    - cron: '0 6 * * *'
   workflow_dispatch: # 支援在 GitHub Actions 介面手動一鍵觸發更新
   push:
     branches: [ main ]
@@ -54,3 +54,4 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+

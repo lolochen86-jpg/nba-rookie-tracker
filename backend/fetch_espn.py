@@ -62,9 +62,34 @@ def eligible_rookies():
     def roster(group):
         data=get(API+'teams/'+group['team']['id']+'/roster')
         if not data.get('athletes'):raise ValueError('Incomplete team roster '+group['team']['id'])
-        return data['athletes']
+        return {'team':TEAM_MAP.get(group['team']['abbreviation'],group['team']['abbreviation']),'athletes':data['athletes']}
     with ThreadPoolExecutor(max_workers=8) as pool:all_rosters=list(pool.map(roster,groups))
-    return {str(a['id']):a for group in all_rosters for a in group if a.get('experience',{}).get('years')==0}
+    return {str(a['id']):a for group in all_rosters for a in group['athletes'] if a.get('experience',{}).get('years')==0}, all_rosters
+
+def build_team_rosters(groups, roster, matches, now):
+    known=defaultdict(list)
+    for cohort,key in [('26','class2025'),('27','class2026')]:
+        for p in roster[key]:known[norm(p['nameEn'])].append((cohort,p))
+    appearances=Counter(str(row['athlete']['id']) for game in matches for row in game)
+    seen=set();teams=[]
+    for group in groups:
+        members=[]
+        for a in group['athletes']:
+            aid=str(a['id']);candidates=known.get(norm(a['displayName']),[])
+            if len(candidates)>1:raise ValueError('Ambiguous roster identity '+a['displayName'])
+            if candidates:
+                cohort,p=candidates[0]
+                if p.get('espnId') and str(p['espnId'])!=aid:raise ValueError('Roster ESPN ID conflict')
+            else:
+                exp=a.get('experience',{}).get('years')
+                if exp not in (0,1):continue
+                cohort='27' if exp==0 else '26';p={}
+            if aid in seen:raise ValueError('Duplicate ESPN team roster membership '+aid)
+            seen.add(aid)
+            members.append({'espnId':aid,'nbaPersonId':p.get('nbaPersonId'),'nameEn':a['displayName'],'nameZh':p.get('nameZh',a['displayName']),'year':cohort,'jersey':a.get('jersey',''),'pos':a.get('position',{}).get('abbreviation','—'),'gp':appearances[aid],'headshot':a.get('headshot',{}).get('href',''),'status':a.get('status',{}).get('type',''),'sourceUrl':'https://www.espn.com/nba/player/_/id/'+aid})
+        teams.append({'team':group['team'],'players':sorted(members,key=lambda p:(p['year'],p['nameEn']))})
+    if len(teams)!=30 or len({t['team'] for t in teams})!=30:raise ValueError('Invalid team roster coverage')
+    return {'updatedAt':now,'source':'ESPN current team rosters','teams':teams}
 
 def main():
     roster=json.loads((DATA/'rookies_latest.json').read_text());profiles=json.loads((DATA/'player_profiles.json').read_text());people=roster['class2025']+roster['class2026']
@@ -87,7 +112,7 @@ def main():
     if any(not isinstance(cached.get(i),list) or not cached[i] for i in events):raise ValueError('Incomplete ESPN cache')
     matches=[cached[i] for i in events]
     known_new={norm(p['nameEn']):p for p in CLASS_2026_BASE}
-    rookie_roster=eligible_rookies()
+    rookie_roster,team_rosters=eligible_rookies()
     byplayer=defaultdict(list);ids=defaultdict(set);unmatched=Counter(); newly_added={}
     for game in matches:
         for row in game:
@@ -131,8 +156,10 @@ def main():
         sec['games']={'updatedAt':now,'data':games,'source':'ESPN'}
         sec['recent']={'updatedAt':now,'data':{'last5':mean(games[:5]),'last10':mean(games[:10])},'source':'ESPN'}
         sec['splits']={'updatedAt':now,'data':{label:mean([g for g in games if pred(g)]) for label,pred in [('home',lambda g:'vs.' in g['MATCHUP']),('away',lambda g:'@' in g['MATCHUP']),('wins',lambda g:g['WL']=='W'),('losses',lambda g:g['WL']=='L')]},'source':'ESPN'}
+    roster['teamRosters']=build_team_rosters(team_rosters,roster,matches,now)
     roster.update(lastUpdated=now,source='ESPN',coverage='Completed ESPN games and ESPN rookie rosters',espnGames=len(events),class2025Count=len(roster['class2025']),class2026Count=len(roster['class2026']));profiles.update(attemptedAt=now,source='ESPN',errors=[])
     for name,obj in [('rookies_latest.json',roster),('player_profiles.json',profiles),('espn_games_cache.json',{'season':'2026-27','games':cached})]:
         temp=DATA/(name+'.tmp');temp.write_text(json.dumps(obj,ensure_ascii=False,allow_nan=False,separators=(',',':')),encoding='utf8');os.replace(temp,DATA/name)
     print('ESPN completed games',len(events),'matched players',len(byplayer),'other player names',len(unmatched))
 if __name__=='__main__':main()
+
